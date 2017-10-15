@@ -1,8 +1,9 @@
 package models
 
+//easyjson:json
 type PostFull struct {
-	User User
-	Forum Forum
-	Post Post
-	Thread Thread
+	Author *User   `json:"author,omitempty"`
+	Forum *Forum	`json:"forum,omitempty"`
+	Post *Post	`json:"post,omitempty"`
+	Thread *Thread `json:"thread,omitempty"`
 }

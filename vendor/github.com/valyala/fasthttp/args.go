@@ -291,7 +291,7 @@ func (a *Args) GetUfloatOrZero(key string) float64 {
 // otherwise false is returned.
 func (a *Args) GetBool(key string) bool {
 	switch string(a.Peek(key)) {
-	case "1", "y", "yes":
+	case "1", "y", "yes", "true":
 		return true
 	default:
 		return false
