@@ -6,3 +6,5 @@ jmeter.log
 /swagger.yml
 /tech-db-forum
 /service/handler_test.go
+/my.prof
+/trace.out
