@@ -8,3 +8,4 @@ jmeter.log
 /service/handler_test.go
 /my.prof
 /trace.out
+/models/models_easyjson.go
