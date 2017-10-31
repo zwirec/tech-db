@@ -14,15 +14,17 @@ type Status struct {
 }
 
 func (s *Status) Status() (*Status, error) {
-	tx := database.DB.MustBegin()
+	tx := database.DB
 	//log.Println("hello")
-	if err := tx.QueryRowx(`SELECT (SELECT count(f.*) FROM forum f) as forum,
+	if err := tx.QueryRow(`SELECT (SELECT count(f.*) FROM forum f) as forum,
 								(SELECT count(t.*) FROM thread t) as thread,
 								(SELECT count(u.*) FROM "user" u) as user,
-								(SELECT count(p.*) FROM post p) as post;`).StructScan(s); err != nil {
-		log.Println(err)
-		tx.Rollback()
-	}
-	tx.Commit()
+								(SELECT count(p.*) FROM post p) as post;`).
+								Scan(&s.Forum, &s.Thread, &s.User, &s.Post);
+		err != nil {
+			log.Println(err)
+			//tx.Rollback()
+		}
+	//tx.Commit()
 	return s, nil
 }

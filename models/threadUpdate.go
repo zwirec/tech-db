@@ -1,9 +1,10 @@
 package models
 
 import (
-	"github.com/zwirec/tech-db/db"
 	"log"
+
 	"github.com/qiangxue/fasthttp-routing"
+	"github.com/zwirec/tech-db/db"
 )
 
 //easyjson:json
@@ -12,43 +13,42 @@ type ThreadUpdate struct {
 	Title   *string
 }
 
-func (t *ThreadUpdate) Update(ctx *routing.Context) (*Thread, error) {
-	tx := database.DB.MustBegin()
-	thread := Thread{}
+func (t *ThreadUpdate) Update(ctx *routing.Context) (*Thread, *Error) {
+	tx, _ := database.DB.Begin()
+	thr := Thread{}
 	var id int
 
-	if err := tx.QueryRowx(
+	if err := tx.QueryRow(
 		`UPDATE thread SET title = COALESCE($1, title),
 							message = COALESCE($2, message)
 							WHERE CASE WHEN $3::INT IS NOT NULL
 							THEN id = $3
 							ELSE slug = $4
 							END	RETURNING id`,
-							t.Title,
-							t.Message,
-							ctx.Get("thread_id"),
-							ctx.Get("thread_slug")).
-							Scan(&id);
+		t.Title,
+		t.Message,
+		ctx.Get("thread_id"),
+		ctx.Get("thread_slug")).
+		Scan(&id);
 		err != nil {
 		//log.Println(err)
 		tx.Rollback()
-		return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "thread"}
+		return nil, &Error{Type: ErrorNotFound}
 	}
 
-	if err := tx.QueryRowx(`SELECT t.id, t.slug, t.title,
-										t.message, f.slug as forum, u.nickname as author,
+	if err := tx.QueryRow(`SELECT t.id, t.slug::text, t.title,
+										t.message, t.forum_slug::text as forum, t.owner_nickname::text as author,
 										t.created, t.votes
 									FROM thread t
-									JOIN forum f ON (t.forum_id = f.id)
-									JOIN "user" u ON (t.owner_id = u.id)
 									WHERE t.id = $1`, id).
-									StructScan(&thread);
+		Scan(&thr.ID, &thr.Slug, &thr.Title, &thr.Message, &thr.Forum,
+		&thr.Author, &thr.Created, &thr.Votes);
 		err != nil {
-			log.Println(err)
-			tx.Rollback()
-		return nil, &database.DBError{Type: database.ERROR_ALREADY_EXISTS, Model: "user"}
+		log.Println(err)
+		tx.Rollback()
+		return nil, &Error{Type: ErrorAlreadyExists}
 	}
 
 	tx.Commit()
-	return &thread, nil
+	return &thr, nil
 }

@@ -1,13 +1,14 @@
 package models
 
 import (
-	"time"
-	"github.com/go-ozzo/ozzo-validation"
-	"regexp"
-	"github.com/zwirec/tech-db/db"
 	"log"
+	"regexp"
+	"time"
+
+	"github.com/go-ozzo/ozzo-validation"
+	"github.com/jackc/pgx"
 	"github.com/qiangxue/fasthttp-routing"
-	"github.com/jmoiron/sqlx"
+	"github.com/zwirec/tech-db/db"
 )
 
 var threadRuleSlug = []validation.Rule{
@@ -27,162 +28,181 @@ type Thread struct {
 	Created time.Time
 }
 
-func (t *Thread) Posts(ctx *routing.Context) (Posts, error) {
-	tx := database.DB.MustBegin()
-
-	if err := tx.QueryRowx(`SELECT id
-						FROM thread t
-						WHERE CASE WHEN $1::int IS NOT NULL THEN t.id = $1
-							  ELSE lower(t.slug) = lower($2)
-							  END`, ctx.Get("thread_id"), ctx.Get("thread_slug")).
-		Scan(new(int)); err != nil {
-		//log.Println(err)
-		tx.Rollback()
-		return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "thread"}
+func (t *Thread) Posts(ctx *routing.Context) (Posts, *Error) {
+	tx := database.DB
+	var threadId int
+	if err := tx.QueryRow(`SELECT id FROM thread t WHERE CASE WHEN $1::int IS NOT NULL THEN t.id = $1 ELSE t.slug = $2 END`,
+		ctx.Get("thread_id"),
+		ctx.Get("thread_slug")).Scan(&threadId); err != nil {
+		log.Println(err)
+		//tx.Rollback()
+		return nil, &Error{Type: ErrorNotFound}
 	}
 
-	var rows *sqlx.Rows
+	//if err := tx.QueryRowx(`SELECT id
+	//					FROM thread t
+	//					WHERE CASE WHEN $1::int IS NOT NULL THEN t.id = $1
+	//						  ELSE t.slug = $2
+	//						  END`, ctx.Get("thread_id"), ctx.Get("thread_slug")).
+	//	Scan(new(int)); err != nil {
+	//	//log.Println(err)
+	//	tx.Rollback()
+	//	return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "thread"}
+	//}
+
+	var rows *pgx.Rows
 	var err error
 	posts := Posts{}
 	limit := ctx.Get("limit").(string)
 	sort := ctx.Get("sort").(string)
+	//log.Println(limit)
+
 	if ctx.Get("sort_type") == "flat" || ctx.Get("sort_type") == "" {
-		if rows, err = tx.Queryx(
-			`SELECT p.id, p.message, p.thread_id as thread, f.slug as forum, u.nickname as author,
+		if rows, err = tx.Query(
+			`SELECT p.id, p.message, p.thread_id as thread, p.forum_slug::text as forum, p.owner_nickname::text as author,
 					p.created, p.isedited, p.parent FROM post p
-					JOIN thread t ON (p.thread_id = t.id)
-					JOIN forum f ON (t.forum_id = f.id)
-					JOIN "user" u ON (u.id = p.owner_id)
-					WHERE CASE WHEN $1::int IS NOT NULL THEN t.id = $1
-					ELSE lower(t.slug) = lower($2)
-					END
-					AND
-					CASE WHEN $3 > -1 THEN
-						CASE WHEN $4 = 'DESC'
-							THEN p.id < $3::int
-						ELSE p.id > $3::int
+					JOIN thread t ON p.thread_id = t.id
+					WHERE t.id = $1 AND
+					CASE WHEN $2 > -1 THEN
+						CASE WHEN $3 = 'DESC'
+							THEN p.id < $2::int
+						ELSE p.id > $2::int
 						END
-					ELSE p.id > $3
+					ELSE TRUE
 					END
 					ORDER BY p.id `+
-				sort+
-				` LIMIT `+
+				sort +
+				`,p.thread_id LIMIT `+
 				limit+ `;`,
-			ctx.Get("thread_id"),
-			ctx.Get("thread_slug"),
+			threadId,
 			ctx.Get("since"),
 			ctx.Get("sort"));
 			err != nil {
 			log.Println(err)
-			tx.Rollback()
-			return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "thread"}
+			//tx.Rollback()
+			return nil, &Error{Type: ErrorNotFound}
 		}
 
 	} else if ctx.Get("sort_type") == "tree" {
 		//log.Println("tree")
-		if rows, err = tx.Queryx(
-			`SELECT p.id, p.message, p.thread_id as thread, f.slug as forum, u.nickname as author,
-					p.created, p.isedited, p.parent
-					FROM post p
-					JOIN thread t ON (p.thread_id = t.id)
-					JOIN forum f ON (t.forum_id = f.id)
-					JOIN "user" u ON (u.id = p.owner_id)
-					WHERE CASE WHEN $1::int IS NOT NULL THEN t.id = $1
-					ELSE lower(t.slug) = lower($2)
-					END
-					AND
-					CASE WHEN $3 > -1 AND $4 = 'DESC'
-						THEN path < (SELECT p.path FROM post p WHERE p.id = $3)
-						WHEN $3 > -1 AND $4 = 'ASC'
-						THEN path > (SELECT p.path FROM post p WHERE p.id = $3)
-					ELSE parent > $3
-					END
-					ORDER BY string_to_array(subltree(p.path, 0, 1)::text,'.')::integer[] `+
-				sort+
-				`, string_to_array(p.path::text,'.')::integer[] `+ sort+ ` LIMIT `+
-				limit+ `;`,
-			ctx.Get("thread_id"),
-			ctx.Get("thread_slug"),
+
+		if rows, err = tx.Query(
+			`SELECT
+                      p.id,
+                      p.message,
+                      p.thread_id      AS thread,
+                      p.forum_slug::text     AS forum,
+                      p.owner_nickname::text AS author,
+                      p.created,
+                      p.isedited,
+                      p.parent
+                    FROM post p
+                      JOIN thread t ON p.thread_id = t.id
+                    WHERE p.thread_id = $1
+                      AND
+                      CASE WHEN $2 > -1
+                        THEN
+                          CASE WHEN $3 = 'DESC'
+                            THEN
+                              path < (
+                                SELECT p1.path
+                                FROM post p1
+                                WHERE p1.id = $2)
+                          WHEN $3 = 'ASC'
+                            THEN path > (
+                              SELECT p1.path
+                              FROM post p1
+                              WHERE p1.id = $2)
+							ELSE TRUE
+                          END
+						ELSE
+                        TRUE
+                      END
+                    ORDER BY path ` + sort + `, p.thread_id LIMIT `+ limit + `;`,
+			threadId,
 			ctx.Get("since"),
 			ctx.Get("sort"));
 			err != nil {
 			log.Println(err)
-			tx.Rollback()
-			return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "thread"}
+			//tx.Rollback()
+			return nil, &Error{Type: ErrorNotFound}
 		}
 	} else {
-		if rows, err = tx.Queryx(
-			`SELECT p.id, p.message, p.thread_id as thread, f.slug as forum, u.nickname as author,
-					p.created, p.isedited, p.parent
-					FROM post p
-					JOIN thread t ON (p.thread_id = t.id)
-					JOIN forum f ON (t.forum_id = f.id)
-					JOIN "user" u ON (u.id = p.owner_id)
-					WHERE CASE WHEN $1::int IS NOT NULL THEN t.id = $1
-					ELSE lower(t.slug) = lower($2)
-					END
-					AND subltree(p.path, 0, 1) IN (
-						SELECT p1.path
-						FROM post p1
-						WHERE nlevel(p1.path) = 1 AND p1.thread_id = t.id and
-						CASE WHEN $3 > -1 AND $4 = 'DESC'
-          						THEN path < (SELECT p2.path FROM post p2 WHERE p2.id = $3)
-        					WHEN $3 > -1 AND $4 = 'ASC'
-          						THEN path > (SELECT p2.path FROM post p2 WHERE p2.id = $3)
-						ELSE p1.id > $3
-						END
-						ORDER BY string_to_array(p1.path::text,'.')::integer[] `+ sort+
-				` LIMIT `+ limit+
-				`)
-			ORDER BY string_to_array(subltree(p.path, 0, 1)::text,'.')::integer[] `+
-				sort+
-				`, string_to_array(p.path::text,'.')::integer[] `+
-				sort+ `;`,
-			ctx.Get("thread_id"),
-			ctx.Get("thread_slug"),
+		if rows, err = tx.Query(
+			`SELECT
+                  p.id,
+                  p.message,
+                  p.thread_id      AS thread,
+                  p.forum_slug::text     AS forum,
+                  p.owner_nickname::text AS author,
+                  p.created,
+                  p.isedited,
+                  p.parent
+                FROM post p
+                  JOIN (
+                         SELECT
+                           p1.path,
+                           p1.thread_id
+                         FROM post p1
+                         WHERE p1.parent = 0 AND p1.thread_id = $1 AND
+                               CASE WHEN $2 > -1
+                                 THEN
+                                   CASE WHEN $3 = 'DESC'
+                                     THEN
+                                       p1.path < (
+                                         SELECT p2.path
+                                         FROM post p2
+                                         WHERE p2.id = $2)
+
+                                   ELSE p1.path > (
+                                     SELECT p2.path
+                                     FROM post p2
+                                     WHERE p2.id = $2)
+                                   END
+                               ELSE p1.id > 0
+                               END
+                         ORDER BY p1.path ` + sort + `
+                         ,p1.created LIMIT ` + limit + `) p1 ON p.path && p1.path
+
+                ORDER BY p.path `+ sort+ `, p.created;`,
+			threadId,
 			ctx.Get("since"),
 			ctx.Get("sort"));
 			err != nil {
 			log.Println(err)
-			tx.Rollback()
-			return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "thread"}
+			//tx.Rollback()
+			return nil, &Error{Type: ErrorNotFound}
 		}
 	}
-
-	defer rows.Close()
 
 	for rows.Next() {
 		post := Post{}
-		rows.StructScan(&post)
+		rows.Scan(&post.ID, &post.Message, &post.Thread, &post.Forum, &post.Author, &post.Created, &post.IsEdited, &post.Parent)
 		posts = append(posts, &post)
 	}
 
-	tx.Commit()
+	//tx.Commit()
 	return posts, nil
 }
 
-func (t *Thread) Details(ctx *routing.Context) (*Thread, error) {
-	dba := database.DB
-	tx := dba.MustBegin()
-	thread := Thread{}
-	if err := tx.QueryRowx(`SELECT t.id, t.slug, t.title, t.message, f.slug as forum, u.nickname as author, t.created, t.votes
+func (t *Thread) Details(ctx *routing.Context) (*Thread, *Error) {
+	tx := database.DB
+	thr := Thread{}
+	if err := tx.QueryRow(`SELECT t.id, t.slug::text, t.title, t.message, t.forum_slug::text as forum,
+										t.owner_nickname::text as author, t.created, t.votes
 						FROM thread t
-						JOIN forum f ON (t.forum_id = f.id)
-						JOIN "user" u ON (t.owner_id = u.id)
 						WHERE CASE WHEN $1::int IS NOT NULL THEN t.id::int = $1
-						ELSE lower(t.slug) = lower($2)
+						ELSE t.slug = $2
 						END`,
-		ctx.Get("thread_id"), ctx.Get("thread_slug")).StructScan(&thread); err != nil {
-		//log.Println(err)
-		tx.Rollback()
-		return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "thread"}
+		ctx.Get("thread_id"), ctx.Get("thread_slug")).
+		Scan(&thr.ID, &thr.Slug, &thr.Title, &thr.Message, &thr.Forum, &thr.Author, &thr.Created, &thr.Votes);
+		err != nil {
+		log.Println(err)
+		//tx.Rollback()
+		return nil, &Error{Type: ErrorNotFound}
 	}
-	tx.Commit()
-	return &thread, nil
-}
-
-func IsDefined() bool {
-	return false
+	//tx.Commit()
+	return &thr, nil
 }
 
 //easyjson:json
@@ -197,57 +217,61 @@ func (thr *Thread) Validate() error {
 	)
 }
 
-func (thr *Thread) Create() (*Thread, error) {
-	dba := database.DB
-	tx := dba.MustBegin()
+func (thr *Thread) Create() (*Thread, *Error) {
+	tx, _ := database.DB.Begin()
+
 	var user_id int64
-	if err := tx.QueryRowx(`SELECT u.id
+
+	if err := tx.QueryRow(`SELECT u.id
 						FROM "user" u
 						WHERE u.nickname = $1;`,
 		thr.Author).
-		Scan(&user_id); err != nil {
+		Scan(&user_id);
+		err != nil {
 		tx.Rollback()
 		log.Println(err)
-		return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "user"}
+		return nil, &Error{Type: ErrorNotFound}
 	}
 
-	var forum_id int64
-	var forum_slug string
+	var forumId int64
+	var forumSlug string
 
-	if err := tx.QueryRowx(`SELECT f.id, f.slug
-						FROM forum f
-						WHERE f.slug = $1;`,
-		thr.Forum).
-		Scan(&forum_id, &forum_slug); err != nil {
+	if err := tx.QueryRow(`SELECT f.id, f.slug::text
+									FROM forum f
+									WHERE f.slug = $1;`,
+		&thr.Forum).
+		Scan(&forumId, &forumSlug);
+		err != nil {
 		tx.Rollback()
 		log.Println(err)
-		return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "forum"}
+		return nil, &Error{Type: ErrorNotFound}
 	}
 
-	thr.Forum = forum_slug
+	thr.Forum = forumSlug
 
-	if err := tx.QueryRowx(`SELECT t.id, t.title, t.slug, t.message, t.created, t.votes, f.slug as forum, u.nickname as author FROM thread t
-									JOIN forum f ON (t.forum_id = f.id)
-									JOIN "user" u ON (t.owner_id = u.id)
-									WHERE lower(t.slug) = lower($1);`, thr.Slug).
-		StructScan(thr);
+	if err := tx.QueryRow(`SELECT t.id, t.title, t.slug::text, t.message, t.created,
+										t.votes, t.forum_slug::text as forum, t.owner_nickname::text as author
+									FROM thread t
+									WHERE t.slug = $1;`, thr.Slug).
+		Scan(&thr.ID, &thr.Title, &thr.Slug, &thr.Message, &thr.Created, &thr.Votes,
+		&thr.Forum, &thr.Author);
 		err == nil {
 		tx.Rollback()
-		//log.Println(err)
-		return thr, &database.DBError{Type: database.ERROR_ALREADY_EXISTS, Model: "thread"}
+		log.Println(err)
+		return thr, &Error{Type: ErrorAlreadyExists}
 	} else {
 		//log.Println(err)
 	}
 
-	res := tx.QueryRowx(`INSERT INTO thread (slug, title, message, created, owner_id, forum_id)
-									VALUES (nullif($1, ''), $2, $3, $4, $5, $6)
-								    RETURNING id, slug, title, message, created, votes`,
-		thr.Slug, thr.Title, thr.Message, thr.Created, user_id, forum_id)
+	res := tx.QueryRow(`INSERT INTO thread (slug, title, message, created, owner_id, owner_nickname, forum_id, forum_slug)
+									VALUES (nullif($1, ''), $2, $3, $4, $5, $6, $7, $8)
+								    RETURNING id, slug::text, title, message, created, votes`,
+		thr.Slug, thr.Title, thr.Message, thr.Created, user_id, thr.Author, forumId, thr.Forum)
 
-	if err := res.StructScan(thr); err != nil {
+	if err := res.Scan(&thr.ID, &thr.Slug, &thr.Title, &thr.Message, &thr.Created, &thr.Votes); err != nil {
 		log.Println(err)
 		tx.Rollback()
-		return thr, &database.DBError{Model: "thread", Type: database.ERROR_ALREADY_EXISTS}
+		return thr, &Error{Type: ErrorAlreadyExists}
 	}
 
 	tx.Commit()

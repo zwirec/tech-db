@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/zwirec/tech-db/service"
 	_ "net/http/pprof"
+
+	"github.com/zwirec/tech-db/service"
 )
 
 func main() {

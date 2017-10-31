@@ -1,12 +1,15 @@
 package database
 
 import (
-	"github.com/jmoiron/sqlx"
-	_"github.com/lib/pq"
-	"log"
-	"io/ioutil"
-	"os"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+
+	"flag"
+
+	"github.com/jackc/pgx"
+	_"github.com/lib/pq"
 )
 
 type DBTypeError string
@@ -21,27 +24,53 @@ func (dberr *DBError) Error() string {
 }
 
 const (
-	ERROR_ALREADY_EXISTS = " already exists "
-	ERROR_DONT_EXISTS    = " don't exists "
+	ERRORALREADYEXISTS = " already exists "
+	ERROR_DONT_EXISTS  = " don't exists "
 )
 
-var DB *sqlx.DB
-//var DBH *fastsql.DB
+var DB *pgx.ConnPool
 
 func InitDB() (err error) {
-	port := os.Getenv("PG_PORT")
-	DB, err = sqlx.Connect("postgres", fmt.Sprintf("user=docker host=localhost password=docker dbname=forum_db port=%s sslmode=disable", port))
+	var port = flag.Int("p", 5432, "help message for flagname")
+	var db = flag.String("db", "forum_db", "blabla")
+
+	//port, _ := strconv.Atoi(os.Getenv("PG_PORT"))
+	//db := os.Getenv("PG_DB")
+	config := pgx.ConnConfig{
+		Host:     "localhost",
+		User:     "docker",
+		Password: "docker",
+		Database: *db,
+		Port:     uint16(*port),
+		//RuntimeParams: map[string]string{
+		//	"sslmode": "disable",
+		//},
+	}
+
+	DB, err = pgx.NewConnPool(
+		pgx.ConnPoolConfig{
+			ConnConfig:     config,
+			MaxConnections: 50,
+		})
+
 	if err != nil {
 		log.Fatal(err)
 	}
-	//DBH, err = fastsql.Open("postgres", fmt.Sprintf("user=docker host=localhost password=docker dbname=forum_db port=%s sslmode=disable", port), 100)
-	DB.SetMaxIdleConns(100)
-	DB.SetMaxOpenConns(100)
-	DB.SetConnMaxLifetime(0)
+	//DBH, err = fastsql.Open("postgres", fmt.Sprintf("user=docker host=localhost password=docker dbname=forum_db port=%s sslmode=disable", port), 50)
+	//log.Println(err)
 	initFile, err := ioutil.ReadFile(fmt.Sprintf("%s/src/github.com/zwirec/tech-db/init.sql", os.Getenv("GOPATH")))
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = DB.Exec(string(initFile))
+	tx, _ := DB.Begin()
+
+	_, err = tx.Exec(string(initFile))
+
+	if err != nil {
+		tx.Rollback()
+		log.Println(err)
+	}
+	tx.Commit()
+	DB.Reset()
 	return nil
 }

@@ -1,11 +1,12 @@
 package models
 
 import (
+	"log"
+	"regexp"
+
 	"github.com/go-ozzo/ozzo-validation"
 	"github.com/go-ozzo/ozzo-validation/is"
-	"regexp"
 	"github.com/zwirec/tech-db/db"
-	"log"
 )
 
 var regexpUsername = regexp.MustCompile(`[a-zA-Z0-9_.]*`)
@@ -17,23 +18,24 @@ var forumUsernameSlug = []validation.Rule{
 
 //easyjson:json
 type User struct {
-	Nickname string  `json:"nickname"`
-	Fullname string  `json:"fullname"`
-	Email    string  `json:"email"`
-	About    string  `json:"about"`
+	Nickname string `json:"nickname"`
+	Fullname string `json:"fullname"`
+	Email    string `json:"email"`
+	About    string `json:"about"`
 }
 
-func (u *User) GetProfile() (*User, error) {
-	dba := database.DB
+func (u *User) GetProfile() (*User, *Error) {
 	user := User{}
-	tx := dba.MustBegin()
-	if err := tx.QueryRowx(`SELECT nickname, fullname, email, about FROM "user" u
-									WHERE lower(u.nickname) = lower($1)`, u.Nickname).StructScan(&user); err != nil {
-		tx.Rollback()
+	tx := database.DB
+	log.Println(u.Nickname)
+	if err := tx.QueryRow(`SELECT nickname::text, fullname, email::text, about FROM "user" u
+									WHERE u.nickname = $1`, u.Nickname).
+		Scan(&user.Nickname, &user.Fullname, &user.Email, &user.About); err != nil {
+		//tx.Rollback()
 		log.Println(err)
-		return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "user"}
+		return nil, &Error{Type: ErrorNotFound}
 	}
-	tx.Commit()
+	//tx.Commit()
 	return &user, nil
 }
 
@@ -48,20 +50,30 @@ func (u *User) Validate() error {
 	)
 }
 
-func (u *User) Create() (*Users, error) {
-	dba := database.DB
+func (u *User) Create() (*Users, *Error) {
 	user := User{}
 	users := Users{}
-	tx := dba.MustBegin()
-	rows, _ := tx.Queryx(`SELECT fullname, nickname, about, email
+	tx, err := database.DB.Begin()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println(u.Nickname)
+	rows, err := tx.Query(`SELECT fullname, nickname::text, about, email::text
 							FROM "user"
 							WHERE "user".nickname = $1 OR "user".email = $2;`,
 		u.Nickname, u.Email)
 
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if exist := rows.Next(); !exist {
-		rows := tx.QueryRowx(`INSERT INTO "user" (fullname, nickname, about, email) VALUES ($1, $2, $3, $4)
-							RETURNING fullname, nickname, about, email`, u.Fullname, u.Nickname, u.About, u.Email)
-		if err := rows.StructScan(&user); err != nil {
+		row := tx.QueryRow(`INSERT INTO "user" (fullname, nickname, about, email) VALUES ($1, $2, $3, $4)
+							RETURNING fullname, nickname::text, about, email::text`, u.Fullname, u.Nickname, u.About, u.Email)
+
+		if err := row.Scan(&user.Fullname, &user.Nickname, &user.About, &user.Email); err != nil {
 			log.Println(err)
 		}
 		tx.Commit()
@@ -70,13 +82,12 @@ func (u *User) Create() (*Users, error) {
 		for exist {
 			u := User{}
 			rows.Scan(&u.Fullname, &u.Nickname, &u.About, &u.Email)
-			rows.StructScan(&u)
+			//rows.Scan(&u)
 			users = append(users, &u)
 			exist = rows.Next()
 		}
-		//fmt.Printf("%+v\n", *users[0])
-		rows.Close()
+		defer rows.Close()
 		tx.Commit()
-		return &users, &database.DBError{Type: database.ERROR_ALREADY_EXISTS, Model: "users"}
+		return &users, &Error{Type: ErrorAlreadyExists}
 	}
 }

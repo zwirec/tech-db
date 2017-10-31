@@ -1,10 +1,11 @@
 package models
 
 import (
+	"log"
+
 	"github.com/go-ozzo/ozzo-validation"
 	"github.com/qiangxue/fasthttp-routing"
 	"github.com/zwirec/tech-db/db"
-	"log"
 )
 
 //easyjson:json
@@ -13,11 +14,11 @@ type Vote struct {
 	Voice    int8
 }
 
-func (v *Vote) Vote(ctx *routing.Context) (*Thread, error) {
+func (v *Vote) Vote(ctx *routing.Context) (*Thread, *Error) {
 
-	tx := database.DB.MustBegin()
-	thread := Thread{}
-	if err := tx.QueryRowx(`INSERT INTO votes (user_id, thread_id, voice) SELECT
+	tx, _ := database.DB.Begin()
+	thr := Thread{}
+	if err := tx.QueryRow(`INSERT INTO votes (user_id, thread_id, voice) SELECT
                                                 (
                                                   SELECT id
                                                   FROM "user" u
@@ -35,26 +36,26 @@ func (v *Vote) Vote(ctx *routing.Context) (*Thread, error) {
 												ON CONFLICT (user_id, thread_id)
   												DO UPDATE SET voice = EXCLUDED.voice
 												RETURNING thread_id`,
-		v.Nickname, ctx.Get("thread_id"), ctx.Get("thread_slug"), v.Voice).Scan(new (int)); err != nil {
-		//log.Println(err)
+		v.Nickname, ctx.Get("thread_id"), ctx.Get("thread_slug"), v.Voice).Scan(new(int)); err != nil {
+		log.Println(err)
 		tx.Rollback()
-		return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "thread"}
+		return nil, &Error{Type: ErrorNotFound}
 	}
 
-	if err := tx.QueryRowx(`SELECT t.id, t.slug, t.title, t.message, f.slug as forum, u.nickname as author, t.created, t.votes
+	if err := tx.QueryRow(`SELECT t.id, t.slug::text, t.title, t.message, t.forum_slug::text as forum, t.owner_nickname::text as author, t.created, t.votes
 						FROM thread t
-						JOIN forum f ON (t.forum_id = f.id)
-						JOIN "user" u ON (t.owner_id = u.id)
 						WHERE
 						CASE WHEN $1::int IS NOT NULL THEN t.id = $1
 						ELSE t.slug = $2
-						END`, ctx.Get("thread_id"), ctx.Get("thread_slug")).StructScan(&thread); err != nil {
+						END`, ctx.Get("thread_id"), ctx.Get("thread_slug")).
+		Scan(&thr.ID, &thr.Slug, &thr.Title, &thr.Message, &thr.Forum, &thr.Author, &thr.Created, &thr.Votes);
+		err != nil {
 		log.Println(err)
 		tx.Rollback()
-		return nil, &database.DBError{Type: database.ERROR_ALREADY_EXISTS, Model: "voice"}
+		return nil, &Error{Type: ErrorAlreadyExists}
 	}
 	tx.Commit()
-	return &thread, nil
+	return &thr, nil
 }
 
 func (v *Vote) Validate() error {

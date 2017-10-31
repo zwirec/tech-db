@@ -1,21 +1,16 @@
 package service
 
 import (
-	"github.com/qiangxue/fasthttp-routing"
-	"github.com/zwirec/tech-db/models"
-	"github.com/mailru/easyjson"
-	"log"
-	"time"
-	"strconv"
-	"github.com/zwirec/tech-db/db"
-	"github.com/valyala/fasthttp"
 	"bytes"
-)
+	"log"
+	"strconv"
+	"time"
 
-func typeHandler(ctx *routing.Context) error {
-	ctx.Response.Header.SetContentType("application/json")
-	return nil
-}
+	"github.com/mailru/easyjson"
+	"github.com/qiangxue/fasthttp-routing"
+	"github.com/valyala/fasthttp"
+	"github.com/zwirec/tech-db/models"
+)
 
 func forumHandler(ctx *routing.Context) error {
 	switch ctx.Param("action") {
@@ -121,7 +116,7 @@ func postUpdateHandler(ctx *routing.Context) {
 		badRequestResponse(ctx)
 	}
 	if id, err := strconv.Atoi(ctx.Param("id")); err == nil {
-		post.ID = int32(id)
+		post.ID = int64(id)
 	} else {
 		log.Println(err)
 	}
@@ -133,13 +128,11 @@ func postUpdateHandler(ctx *routing.Context) {
 func postUpdateResponse(ctx *routing.Context, post *models.Post) {
 	post, err := post.Update()
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_DONT_EXISTS:
-			{
-				ctx.SetStatusCode(fasthttp.StatusNotFound)
-				easyjson.MarshalToWriter(&models.Error{Message: "post don't exists"}, ctx)
-				return
-			}
+		switch err.Type {
+		case models.ErrorNotFound:
+			ctx.SetStatusCode(fasthttp.StatusNotFound)
+			easyjson.MarshalToWriter(err, ctx)
+			return
 		}
 	} else {
 		ctx.SetStatusCode(fasthttp.StatusOK)
@@ -151,7 +144,7 @@ func postUpdateResponse(ctx *routing.Context, post *models.Post) {
 func postDetailsHandler(ctx *routing.Context) {
 	id, _ := strconv.Atoi(ctx.Param("id"))
 
-	post := models.Post{ID: int32(id)}
+	post := models.Post{ID: int64(id)}
 	related := make(map[string]bool, 4)
 
 	if len(ctx.QueryArgs().PeekMulti("related")) != 0 {
@@ -161,7 +154,6 @@ func postDetailsHandler(ctx *routing.Context) {
 		}
 	}
 
-
 	//log.Printf("%+v\n", related)
 	ctx.Set("related", related)
 	postDetailsResponse(ctx, &post)
@@ -170,11 +162,11 @@ func postDetailsHandler(ctx *routing.Context) {
 func postDetailsResponse(ctx *routing.Context, post *models.Post) {
 	postFull, err := post.Details(ctx)
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_DONT_EXISTS:
+		switch err.Type {
+		case models.ErrorNotFound:
 			{
 				ctx.SetStatusCode(fasthttp.StatusNotFound)
-				easyjson.MarshalToWriter(&models.Error{Message: "post don't exists"}, ctx)
+				easyjson.MarshalToWriter(err, ctx)
 				return
 			}
 		}
@@ -216,8 +208,8 @@ func postsThreadHandler(ctx *routing.Context) {
 func postsThreadResponse(ctx *routing.Context, thread *models.Thread) {
 	posts, err := thread.Posts(ctx)
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_DONT_EXISTS:
+		switch err.Type {
+		case models.ErrorNotFound:
 			{
 				ctx.SetStatusCode(fasthttp.StatusNotFound)
 				easyjson.MarshalToWriter(&models.Error{Message: "thread don't exists"}, ctx)
@@ -244,8 +236,8 @@ func voteThreadHandler(ctx *routing.Context) {
 func voteThreadResponse(ctx *routing.Context, voice *models.Vote) {
 	thread, err := voice.Vote(ctx)
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_DONT_EXISTS:
+		switch err.Type {
+		case models.ErrorNotFound:
 			{
 				ctx.SetStatusCode(fasthttp.StatusNotFound)
 				easyjson.MarshalToWriter(&models.Error{Message: "thread don't exists"}, ctx)
@@ -295,11 +287,11 @@ func detailsThreadHandler(ctx *routing.Context) {
 func detailsThreadResponse(ctx *routing.Context, thread *models.Thread) {
 	thread, err := thread.Details(ctx)
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_DONT_EXISTS:
+		switch err.Type {
+		case models.ErrorNotFound:
 			{
 				ctx.SetStatusCode(fasthttp.StatusNotFound)
-				easyjson.MarshalToWriter(&models.Error{}, ctx)
+				easyjson.MarshalToWriter(err, ctx)
 				return
 			}
 		}
@@ -322,11 +314,11 @@ func updateThreadHandler(ctx *routing.Context) {
 func updateThreadResponse(ctx *routing.Context, threadUpdate *models.ThreadUpdate) {
 	thread, err := threadUpdate.Update(ctx)
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_DONT_EXISTS:
+		switch err.Type {
+		case models.ErrorNotFound:
 			{
 				ctx.SetStatusCode(fasthttp.StatusNotFound)
-				easyjson.MarshalToWriter(&models.Error{}, ctx)
+				easyjson.MarshalToWriter(err, ctx)
 				return
 			}
 		}
@@ -344,12 +336,13 @@ func createForumHandler(ctx *routing.Context) error {
 		log.Println(err)
 		return err
 	}
-	if err := forum.Validate(); err != nil {
-		log.Println(err)
-		badRequestResponse(ctx)
-		return nil
-	}
+	//if err := forum.Validate(); err != nil {
+	//	log.Println(err)
+	//	badRequestResponse(ctx)
+	//	return nil
+	//}
 	createForumResponse(ctx, &forum)
+	//createResponse(ctx, &forum)
 	return nil
 }
 
@@ -377,7 +370,7 @@ func createPostHandler(ctx *routing.Context) error {
 	if err := easyjson.Unmarshal(ctx.PostBody(), &posts); err != nil {
 		log.Println(err)
 	}
-	ctx.Set("created", time.Now().Format(time.RFC3339Nano))
+	ctx.Set("created", time.Now().Format("2006-01-02T15:04:05.000000Z"))
 	//for _, post := range posts {
 	//	if err := post.Validate(); err != nil {
 	//		log.Println(err)
@@ -386,16 +379,6 @@ func createPostHandler(ctx *routing.Context) error {
 	//}
 	createPostResponse(ctx, &posts)
 	return nil
-}
-
-func checkSlugOrID(ctx *routing.Context) {
-	thread_slug := ctx.Param("slug_or_id")
-	thread_id, err := strconv.Atoi(thread_slug)
-	if err != nil {
-		ctx.Set("thread_slug", thread_slug)
-	} else {
-		ctx.Set("thread_id", thread_id)
-	}
 }
 
 func createUserHandler(ctx *routing.Context) error {
@@ -407,11 +390,11 @@ func createUserHandler(ctx *routing.Context) error {
 		return err
 	}
 	user.Nickname = nickname
-	if err := user.Validate(); err != nil {
-		log.Println(err)
-		badRequestResponse(ctx)
-		return nil
-	}
+	//if err := user.Validate(); err != nil {
+	//	log.Println(err)
+	//	badRequestResponse(ctx)
+	//	return nil
+	//}
 	createUserResponse(ctx, &user)
 	return nil
 }
@@ -447,10 +430,12 @@ func threadsForumHandler(ctx *routing.Context) error {
 
 	//log.Println(string(ctx.QueryArgs().QueryString()))
 
-	_, err := time.Parse("2006-01-02T15:04:05Z", string(ctx.QueryArgs().Peek("since")))
+	_, err := time.Parse("2006-01-02T15:04:05.000Z07:00", string(ctx.QueryArgs().Peek("since")))
 
 	if err == nil {
 		ctx.Set("since", string(ctx.QueryArgs().Peek("since")))
+	} else {
+		log.Println(err, string(ctx.RequestURI()))
 	}
 
 	threadsForumResponse(ctx, &forum)
@@ -489,14 +474,14 @@ func usersForumHandler(ctx *routing.Context) error {
 func usersForumResponse(ctx *routing.Context, forum *models.Forum) {
 	users, err := forum.Users(ctx)
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_DONT_EXISTS:
+		switch err.Type {
+		case models.ErrorNotFound:
 			ctx.SetStatusCode(fasthttp.StatusNotFound)
-			easyjson.MarshalToWriter(&models.Error{}, ctx)
+			easyjson.MarshalToWriter(err, ctx)
 			return
-		case database.ERROR_ALREADY_EXISTS:
+		case models.ErrorAlreadyExists:
 			ctx.SetStatusCode(fasthttp.StatusConflict)
-			easyjson.MarshalToWriter(&models.Error{}, ctx)
+			easyjson.MarshalToWriter(err, ctx)
 			return
 		}
 	} else {
@@ -517,14 +502,14 @@ func updateUserHandler(ctx *routing.Context) {
 func updateUserResponse(ctx *routing.Context, update *models.UserUpdate) {
 	profile, err := update.UpdateProfile(ctx)
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_DONT_EXISTS:
+		switch err.Type {
+		case models.ErrorNotFound:
 			ctx.SetStatusCode(fasthttp.StatusNotFound)
-			easyjson.MarshalToWriter(&models.User{}, ctx)
+			easyjson.MarshalToWriter(err, ctx)
 			return
-		case database.ERROR_ALREADY_EXISTS:
+		case models.ErrorAlreadyExists:
 			ctx.SetStatusCode(fasthttp.StatusConflict)
-			easyjson.MarshalToWriter(&models.User{}, ctx)
+			easyjson.MarshalToWriter(err, ctx)
 			return
 		}
 	} else {
@@ -543,11 +528,11 @@ func profileUserHandler(ctx *routing.Context) {
 func profileUserResponse(ctx *routing.Context, user *models.User) {
 	profile, err := user.GetProfile()
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_DONT_EXISTS:
+		switch err.Type {
+		case models.ErrorNotFound:
 			{
 				ctx.SetStatusCode(fasthttp.StatusNotFound)
-				easyjson.MarshalToWriter(&models.Error{}, ctx)
+				easyjson.MarshalToWriter(err, ctx)
 				return
 			}
 		}
@@ -561,17 +546,17 @@ func profileUserResponse(ctx *routing.Context, user *models.User) {
 func createThreadResponse(ctx *routing.Context, thread *models.Thread) {
 	thread, err := thread.Create()
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_ALREADY_EXISTS:
+		switch err.Type {
+		case models.ErrorAlreadyExists:
 			{
 				ctx.SetStatusCode(fasthttp.StatusConflict)
 				easyjson.MarshalToWriter(thread, ctx)
 				return
 			}
-		case database.ERROR_DONT_EXISTS:
+		case models.ErrorNotFound:
 			{
 				ctx.SetStatusCode(fasthttp.StatusNotFound)
-				easyjson.MarshalToWriter(&models.Error{}, ctx)
+				easyjson.MarshalToWriter(err, ctx)
 				return
 			}
 		}
@@ -582,15 +567,15 @@ func createThreadResponse(ctx *routing.Context, thread *models.Thread) {
 	}
 }
 
-func createPostResponse(ctx *routing.Context, posts *models.Posts) {
-	posts, err := posts.Create(ctx)
+func createPostResponse(ctx *routing.Context, post *models.Posts) {
+	posts, err := post.Create(ctx)
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_DONT_EXISTS:
+		switch err.Type {
+		case models.ErrorAlreadyExists:
 			ctx.SetStatusCode(fasthttp.StatusConflict)
 			easyjson.MarshalToWriter(&models.Error{}, ctx)
 			return
-		case database.ERROR_ALREADY_EXISTS:
+		case models.ErrorNotFound:
 			ctx.SetStatusCode(fasthttp.StatusNotFound)
 			easyjson.MarshalToWriter(&models.Error{}, ctx)
 			return
@@ -605,14 +590,14 @@ func createPostResponse(ctx *routing.Context, posts *models.Posts) {
 func createUserResponse(ctx *routing.Context, user *models.User) {
 	users, err := user.Create()
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_ALREADY_EXISTS:
+		switch err.Type {
+		case models.ErrorAlreadyExists:
 			{
 				ctx.SetStatusCode(fasthttp.StatusConflict)
 				easyjson.MarshalToWriter(*users, ctx)
 				return
 			}
-		case database.ERROR_DONT_EXISTS:
+		case models.ErrorNotFound:
 			{
 				ctx.SetStatusCode(fasthttp.StatusNotFound)
 				return
@@ -632,21 +617,15 @@ func createUserResponse(ctx *routing.Context, user *models.User) {
 func createForumResponse(ctx *routing.Context, forum *models.Forum) {
 	forum, err := forum.Create()
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_ALREADY_EXISTS:
-			{
-				//log.Println("forum already exists")
-				ctx.SetStatusCode(fasthttp.StatusConflict)
-				easyjson.MarshalToWriter(forum, ctx)
-				return
-			}
-		case database.ERROR_DONT_EXISTS:
-			{
-				//log.Println("user don't exists")
-				ctx.SetStatusCode(fasthttp.StatusNotFound)
-				easyjson.MarshalToWriter(&models.Error{}, ctx)
-				return
-			}
+		switch err.Type {
+		case models.ErrorAlreadyExists:
+			ctx.SetStatusCode(fasthttp.StatusConflict)
+			easyjson.MarshalToWriter(forum, ctx)
+			return
+		case models.ErrorNotFound:
+			ctx.SetStatusCode(fasthttp.StatusNotFound)
+			easyjson.MarshalToWriter(err, ctx)
+			return
 		}
 	} else {
 		ctx.SetStatusCode(fasthttp.StatusCreated)
@@ -658,13 +637,11 @@ func createForumResponse(ctx *routing.Context, forum *models.Forum) {
 func threadsForumResponse(ctx *routing.Context, forum *models.Forum) {
 	threads, err := forum.GetThreads(ctx)
 	if err != nil {
-		switch err.(*database.DBError).Type {
-		case database.ERROR_DONT_EXISTS:
-			{
-				ctx.SetStatusCode(fasthttp.StatusNotFound)
-				easyjson.MarshalToWriter(&models.Error{}, ctx)
-				return
-			}
+		switch err.Type {
+		case models.ErrorNotFound:
+			ctx.SetStatusCode(fasthttp.StatusNotFound)
+			easyjson.MarshalToWriter(&models.Error{}, ctx)
+			return
 		}
 	} else {
 		ctx.SetStatusCode(fasthttp.StatusOK)
@@ -675,9 +652,9 @@ func threadsForumResponse(ctx *routing.Context, forum *models.Forum) {
 
 func detailsForumResponse(ctx *routing.Context, forum *models.Forum) {
 	forum, err := forum.Select()
-	if err != nil && err.(*database.DBError).Type == database.ERROR_DONT_EXISTS {
+	if err != nil && err.Type == models.ErrorNotFound {
 		ctx.SetStatusCode(fasthttp.StatusNotFound)
-		easyjson.MarshalToWriter(&models.Error{}, ctx)
+		easyjson.MarshalToWriter(err, ctx)
 		return
 	} else {
 		ctx.SetStatusCode(fasthttp.StatusOK)

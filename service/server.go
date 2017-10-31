@@ -1,12 +1,14 @@
 package service
 
 import (
-	"github.com/valyala/fasthttp"
-	"github.com/qiangxue/fasthttp-routing"
-	_ "github.com/mkevac/debugcharts"
-	"github.com/zwirec/tech-db/db"
 	"log"
 	"runtime"
+
+	_ "github.com/mkevac/debugcharts"
+	"github.com/qiangxue/fasthttp-routing"
+	"github.com/valyala/fasthttp"
+	"github.com/zwirec/tech-db/db"
+	"io/ioutil"
 )
 
 type Service struct {
@@ -18,25 +20,29 @@ func NewService() *Service {
 	return &Service{server: &fasthttp.Server{}, router: routing.New()}
 }
 
-func (svc *Service) Run() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
+func (svc *Service) Run() error {
+
+	runtime.GOMAXPROCS(2)
+
 	svc.setEndpointHandlers()
-	log.SetFlags(log.Llongfile | log.Ltime | log.Lmicroseconds)
+
+	log.SetFlags(log.Llongfile | log.Ltime)
+
+	log.SetOutput(ioutil.Discard)
 	if err := database.InitDB(); err != nil {
 		log.Fatal(err)
 	}
 	svc.server.Handler = svc.router.HandleRequest
 	svc.server.MaxConnsPerIP = 10000
 	svc.server.Concurrency = 10000
-	svc.server.ListenAndServe(":5000")
+	return svc.server.ListenAndServe(":5001")
 }
 
 func (svc *Service) setEndpointHandlers() {
-	svc.router.To("GET,POST","/api/forum/<slug>/<action>", forumHandler, typeHandler)
+	svc.router.To("GET,POST", "/api/forum/<slug>/<action>", forumHandler, typeHandler)
 	svc.router.Post("/api/forum/<action>", forumHandler, typeHandler)
-	svc.router.To("GET,POST","/api/user/<nickname>/<action>", userHandler, typeHandler)
+	svc.router.To("GET,POST", "/api/user/<nickname>/<action>", userHandler, typeHandler)
 	svc.router.To("GET,POST", "/api/thread/<slug_or_id>/<action>", threadHandler, typeHandler)
 	svc.router.To("GET,POST", "/api/service/<action>", serviceHandler, typeHandler)
 	svc.router.To("GET,POST", "/api/post/<id>/details", postHandler, typeHandler)
 }
-
