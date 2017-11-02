@@ -9,7 +9,6 @@ import (
 	"flag"
 
 	"github.com/jackc/pgx"
-	_"github.com/lib/pq"
 )
 
 type DBTypeError string
