@@ -35,7 +35,7 @@ func (svc *Service) Run() error {
 	svc.server.Handler = svc.router.HandleRequest
 	svc.server.MaxConnsPerIP = 10000
 	svc.server.Concurrency = 10000
-	return svc.server.ListenAndServe(":5001")
+	return svc.server.ListenAndServe(":5000")
 }
 
 func (svc *Service) setEndpointHandlers() {
