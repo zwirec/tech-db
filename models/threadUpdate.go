@@ -1,8 +1,6 @@
 package models
 
 import (
-	"log"
-
 	"github.com/qiangxue/fasthttp-routing"
 	"github.com/zwirec/tech-db/db"
 )
@@ -31,7 +29,7 @@ func (t *ThreadUpdate) Update(ctx *routing.Context) (*Thread, *Error) {
 		ctx.Get("thread_slug")).
 		Scan(&id);
 		err != nil {
-		//log.Println(err)
+		////1
 		tx.Rollback()
 		return nil, &Error{Type: ErrorNotFound}
 	}
@@ -44,7 +42,7 @@ func (t *ThreadUpdate) Update(ctx *routing.Context) (*Thread, *Error) {
 		Scan(&thr.ID, &thr.Slug, &thr.Title, &thr.Message, &thr.Forum,
 		&thr.Author, &thr.Created, &thr.Votes);
 		err != nil {
-		log.Println(err)
+		//1
 		tx.Rollback()
 		return nil, &Error{Type: ErrorAlreadyExists}
 	}

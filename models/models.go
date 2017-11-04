@@ -1,8 +1,6 @@
 package models
 
 import (
-	"log"
-
 	"github.com/zwirec/tech-db/db"
 )
 
@@ -20,7 +18,7 @@ func Clear() error {
 	if _, err := tx.Exec(`TRUNCATE TABLE forum, thread, "user", post RESTART IDENTITY CASCADE`);
 		err != nil {
 		tx.Rollback()
-		log.Println(err)
+		//1
 	}
 	tx.Commit()
 	database.DB.Reset()

@@ -1,8 +1,6 @@
 package models
 
 import (
-	"log"
-
 	"github.com/go-ozzo/ozzo-validation"
 	"github.com/go-ozzo/ozzo-validation/is"
 	"github.com/qiangxue/fasthttp-routing"
@@ -29,12 +27,12 @@ func (u *UserUpdate) UpdateProfile(ctx *routing.Context) (*User, *Error) {
 	if err := tx.QueryRow(`SELECT id FROM "user" u
 									WHERE u.nickname = $1`,
 		ctx.Param("nickname")).Scan(new(int)); err != nil {
-		log.Println(err)
+		//1
 		tx.Rollback()
 		return nil, &Error{Type: ErrorNotFound}
 
 	}
-	//log.Println(u.Email)
+	////1
 	if err := tx.QueryRow(`UPDATE "user" SET fullname = COALESCE($1, fullname),
 													email = COALESCE($2, email),
 													about = COALESCE($3, about)
@@ -42,11 +40,11 @@ func (u *UserUpdate) UpdateProfile(ctx *routing.Context) (*User, *Error) {
 		u.Fullname, u.Email, u.About, ctx.Param("nickname")).
 		Scan(&user.Nickname, &user.Fullname, &user.Email, &user.About);
 		err != nil {
-		log.Println(err)
+		//1
 		tx.Rollback()
 		return nil, &Error{Type: ErrorAlreadyExists}
 	}
-	//log.Println(tx.Commit())
+	////1
 	tx.Commit()
 	return &user, nil
 }

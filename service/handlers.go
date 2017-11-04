@@ -42,7 +42,7 @@ func threadHandler(ctx *routing.Context) error {
 		case "details":
 			updateThreadHandler(ctx)
 		case "vote":
-			//log.Println("Voting...")
+			////1
 			voteThreadHandler(ctx)
 		}
 	} else {
@@ -50,7 +50,7 @@ func threadHandler(ctx *routing.Context) error {
 		case "details":
 			detailsThreadHandler(ctx)
 		case "posts":
-			//log.Println("Get posts...")
+			////1
 			postsThreadHandler(ctx)
 		}
 	}
@@ -63,7 +63,7 @@ func userHandler(ctx *routing.Context) error {
 		case "create":
 			createUserHandler(ctx)
 		case "profile":
-			//log.Println("update user profile...")
+			////1
 			updateUserHandler(ctx)
 		default:
 			notFoundResponse(ctx)
@@ -72,7 +72,7 @@ func userHandler(ctx *routing.Context) error {
 	} else {
 		switch ctx.Param("action") {
 		case "profile":
-			//log.Println("Get user profile...")
+			////1
 			profileUserHandler(ctx)
 		default:
 			notFoundResponse(ctx)
@@ -112,13 +112,13 @@ func postUpdateHandler(ctx *routing.Context) {
 	post := models.Post{}
 
 	if err := easyjson.Unmarshal(ctx.PostBody(), &post); err != nil {
-		log.Println(err)
+		//1
 		badRequestResponse(ctx)
 	}
 	if id, err := strconv.Atoi(ctx.Param("id")); err == nil {
 		post.ID = int64(id)
 	} else {
-		log.Println(err)
+		//1
 	}
 
 	postUpdateResponse(ctx, &post)
@@ -149,7 +149,7 @@ func postDetailsHandler(ctx *routing.Context) {
 
 	if len(ctx.QueryArgs().PeekMulti("related")) != 0 {
 		for _, rel := range bytes.Split(ctx.QueryArgs().PeekMulti("related")[0], []byte(",")) {
-			//log.Println(string(rel))
+			////1
 			related[string(rel)] = true
 		}
 	}
@@ -186,7 +186,7 @@ func postsThreadHandler(ctx *routing.Context) {
 	} else {
 		ctx.Set("limit", strconv.Itoa(limit))
 	}
-	//log.Println(string(ctx.QueryArgs().Peek("desc")))
+	////1
 
 	if ctx.QueryArgs().GetBool("desc") == false {
 		ctx.Set("sort", "ASC")
@@ -227,7 +227,7 @@ func voteThreadHandler(ctx *routing.Context) {
 	checkSlugOrID(ctx)
 	voice := models.Vote{}
 	if err := easyjson.Unmarshal(ctx.PostBody(), &voice); err != nil {
-		log.Println(err)
+		//1
 		return
 	}
 	voteThreadResponse(ctx, &voice)
@@ -259,7 +259,7 @@ func serviceStatusHandler(ctx *routing.Context) {
 func serviceStatusResponse(ctx *routing.Context, status *models.Status) {
 	status, err := status.Status()
 	if err != nil {
-		log.Println(err)
+		//1
 	} else {
 		ctx.SetStatusCode(fasthttp.StatusOK)
 		easyjson.MarshalToWriter(status, ctx)
@@ -330,14 +330,14 @@ func updateThreadResponse(ctx *routing.Context, threadUpdate *models.ThreadUpdat
 }
 
 func createForumHandler(ctx *routing.Context) error {
-	//log.Println("Create forum...")
+	////1
 	forum := models.Forum{}
 	if err := easyjson.Unmarshal(ctx.PostBody(), &forum); err != nil {
-		log.Println(err)
+		//1
 		return err
 	}
 	//if err := forum.Validate(); err != nil {
-	//	log.Println(err)
+	//	//1
 	//	badRequestResponse(ctx)
 	//	return nil
 	//}
@@ -347,14 +347,14 @@ func createForumHandler(ctx *routing.Context) error {
 }
 
 func createThreadHandler(ctx *routing.Context) error {
-	//log.Println("Create thread...")
+	////1
 	thread := models.Thread{Created: time.Now()}
 	if err := easyjson.Unmarshal(ctx.PostBody(), &thread); err != nil {
 		log.Fatal(err)
 	}
 	thread.Forum = ctx.Param("slug")
 	//if err := thread.Validate(); err != nil {
-	//	log.Println(err)
+	//	//1
 	//	badRequestResponse(ctx)
 	//	return nil
 	//}
@@ -364,16 +364,16 @@ func createThreadHandler(ctx *routing.Context) error {
 }
 
 func createPostHandler(ctx *routing.Context) error {
-	//log.Println("Create post...")
+	////1
 	checkSlugOrID(ctx)
 	posts := models.Posts{}
 	if err := easyjson.Unmarshal(ctx.PostBody(), &posts); err != nil {
-		log.Println(err)
+		//1
 	}
 	ctx.Set("created", time.Now().Format("2006-01-02T15:04:05.000000Z"))
 	//for _, post := range posts {
 	//	if err := post.Validate(); err != nil {
-	//		log.Println(err)
+	//		//1
 	//		return err
 	//	}
 	//}
@@ -382,16 +382,16 @@ func createPostHandler(ctx *routing.Context) error {
 }
 
 func createUserHandler(ctx *routing.Context) error {
-	//log.Println("Create user...")
+	////1
 	nickname := ctx.Param("nickname")
 	user := models.User{}
 	if err := easyjson.Unmarshal(ctx.PostBody(), &user); err != nil {
-		log.Println(err)
+		//1
 		return err
 	}
 	user.Nickname = nickname
 	//if err := user.Validate(); err != nil {
-	//	log.Println(err)
+	//	//1
 	//	badRequestResponse(ctx)
 	//	return nil
 	//}
@@ -416,9 +416,9 @@ func threadsForumHandler(ctx *routing.Context) error {
 		ctx.Set("limit", strconv.Itoa(limit))
 	}
 
-	//log.Println(ctx.Get("limit"))
+	////1
 
-	//log.Println(string(ctx.QueryArgs().QueryString()))
+	////1
 
 	if ctx.QueryArgs().GetBool("desc") == false {
 		ctx.Set("sort", "ASC")
@@ -426,16 +426,16 @@ func threadsForumHandler(ctx *routing.Context) error {
 		ctx.Set("sort", "DESC")
 	}
 
-	//log.Println(ctx.Get("sort"))
+	////1
 
-	//log.Println(string(ctx.QueryArgs().QueryString()))
+	////1
 
 	_, err := time.Parse("2006-01-02T15:04:05.000Z07:00", string(ctx.QueryArgs().Peek("since")))
 
 	if err == nil {
 		ctx.Set("since", string(ctx.QueryArgs().Peek("since")))
 	} else {
-		log.Println(err, string(ctx.RequestURI()))
+		//1
 	}
 
 	threadsForumResponse(ctx, &forum)
@@ -573,16 +573,19 @@ func createPostResponse(ctx *routing.Context, post *models.Posts) {
 		switch err.Type {
 		case models.ErrorAlreadyExists:
 			ctx.SetStatusCode(fasthttp.StatusConflict)
+			//models.PostsPool.Put(posts)
 			easyjson.MarshalToWriter(&models.Error{}, ctx)
 			return
 		case models.ErrorNotFound:
 			ctx.SetStatusCode(fasthttp.StatusNotFound)
+			//models.PostsPool.Put(posts)
 			easyjson.MarshalToWriter(&models.Error{}, ctx)
 			return
 		}
 	} else {
 		ctx.SetStatusCode(fasthttp.StatusCreated)
 		easyjson.MarshalToWriter(posts, ctx)
+		//models.PostsPool.Put(posts)
 		return
 	}
 }

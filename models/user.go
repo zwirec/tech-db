@@ -27,12 +27,12 @@ type User struct {
 func (u *User) GetProfile() (*User, *Error) {
 	user := User{}
 	tx := database.DB
-	log.Println(u.Nickname)
+	//1
 	if err := tx.QueryRow(`SELECT nickname::text, fullname, email::text, about FROM "user" u
 									WHERE u.nickname = $1`, u.Nickname).
 		Scan(&user.Nickname, &user.Fullname, &user.Email, &user.About); err != nil {
 		//tx.Rollback()
-		log.Println(err)
+		//1
 		return nil, &Error{Type: ErrorNotFound}
 	}
 	//tx.Commit()
@@ -59,7 +59,7 @@ func (u *User) Create() (*Users, *Error) {
 		log.Fatal(err)
 	}
 
-	log.Println(u.Nickname)
+	//1
 	rows, err := tx.Query(`SELECT fullname, nickname::text, about, email::text
 							FROM "user"
 							WHERE "user".nickname = $1 OR "user".email = $2;`,
@@ -74,7 +74,7 @@ func (u *User) Create() (*Users, *Error) {
 							RETURNING fullname, nickname::text, about, email::text`, u.Fullname, u.Nickname, u.About, u.Email)
 
 		if err := row.Scan(&user.Fullname, &user.Nickname, &user.About, &user.Email); err != nil {
-			log.Println(err)
+			//1
 		}
 		tx.Commit()
 		return &Users{&user}, nil

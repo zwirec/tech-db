@@ -4,6 +4,8 @@ import (
 	"log"
 	"regexp"
 
+	"sync"
+
 	"github.com/go-ozzo/ozzo-validation"
 	"github.com/qiangxue/fasthttp-routing"
 	"github.com/zwirec/tech-db/db"
@@ -25,12 +27,20 @@ type Forum struct {
 	User    string `json:"user"`
 }
 
+var UsersPool = sync.Pool{New: func() interface{} {
+	return Users{}
+}}
+
+
+
 func (f *Forum) Users(ctx *routing.Context) (Users, *Error) {
-	users := Users{}
+	users := UsersPool.Get().(Users)
 	tx := database.DB
+
 	limit := ctx.Get("limit").(string)
 	sort := ctx.Get("sort").(string)
 
+	defer UsersPool.Put(users)
 	if err := tx.QueryRow(`SELECT id FROM forum f WHERE f.slug = $1`, ctx.Get("forum_slug")).
 		Scan(new(int)); err != nil {
 		return nil, &Error{Type: ErrorNotFound}
@@ -46,8 +56,8 @@ func (f *Forum) Users(ctx *routing.Context) (Users, *Error) {
 								ELSE TRUE
 								END
 						  		END
-								ORDER BY nickname `+ sort+
-		` LIMIT `+ limit, ctx.Get("forum_slug"), ctx.Get("since"), sort)
+								ORDER BY nickname ` + sort +
+		` LIMIT ` + limit, ctx.Get("forum_slug"), ctx.Get("since"), sort)
 
 	if err != nil {
 		log.Fatal(err)
@@ -71,7 +81,7 @@ func (f *Forum) Select() (*Forum, *Error) {
 								WHERE f.slug = $1`,
 		f.Slug).Scan(&f.Slug, &f.Title, &f.Posts, &f.Threads, &f.User)
 	if err != nil {
-		log.Println(err)
+		//1
 		//tx.Rollback()
 		return nil, &Error{Type: ErrorNotFound}
 	}
@@ -103,7 +113,7 @@ func (f *Forum) Create() (*Forum, *Error) {
 
 	if err := tx.QueryRow(`SELECT slug::text, title, posts, threads FROM forum WHERE slug = $1`, f.Slug).
 		Scan(&f.Slug, &f.Title, &f.Posts, &f.Threads); err == nil {
-		log.Println(err)
+		//1
 		tx.Rollback()
 		return f, &Error{Type: ErrorAlreadyExists, Message: "forum already exists"}
 	}
@@ -113,7 +123,7 @@ func (f *Forum) Create() (*Forum, *Error) {
 									RETURNING slug::text, title, posts, threads;`,
 		f.Slug, f.Title, id, f.User).Scan(&f.Slug, &f.Title, &f.Posts, &f.Threads);
 		err != nil {
-		log.Println(err)
+		//1
 		tx.Rollback()
 		return f, &Error{Type: ErrorAlreadyExists, Message: "forum already exists"}
 	}
@@ -129,31 +139,32 @@ func (f *Forum) GetThreads(ctx *routing.Context) (*Threads, *Error) {
 	var forumId int
 
 	err := tx.QueryRow(`SELECT id FROM forum WHERE slug = $1`, f.Slug).Scan(&forumId)
-	log.Println(err)
+	//1
 
 	if err == nil {
 		rows, err := tx.Query(`SELECT t.id, t.slug::text, t.title, t.message, t.owner_nickname::text as author,
 			t.forum_slug::text as forum, t.created, t.votes
 		FROM thread t
 		WHERE
+		t.forum_id = $1 AND
 		CASE WHEN $2::timestamp with time zone IS NOT NULL
 		THEN
 		CASE WHEN $3 = 'DESC'
-        									THEN created <= $2 AND t.forum_id = $1
-		ELSE created >= $2 AND t.forum_id = $1
+      	THEN created <= $2
+		ELSE created >= $2
 		END
-		ELSE t.forum_id = $1
+		ELSE TRUE
 		END
-		ORDER BY created ` + ctx.Get("sort").(string) + ` LIMIT `+ ctx.Get("limit").(string) + `;`,
+		ORDER BY created `+ ctx.Get("sort").(string) + ` LIMIT ` + ctx.Get("limit").(string) + `;`,
 			forumId, ctx.Get("since"), ctx.Get("sort"))
 
-		log.Println(ctx.Get("sort").(string))
-		log.Println(ctx.Get("limit").(string))
+		//1
+		//1
 
 		defer rows.Close()
 
 		if err != nil {
-			log.Println(err)
+			//1
 			//tx.Rollback()
 		}
 
@@ -162,7 +173,7 @@ func (f *Forum) GetThreads(ctx *routing.Context) (*Threads, *Error) {
 			err := rows.Scan(&thr.ID, &thr.Slug, &thr.Title, &thr.Message, &thr.Author, &thr.Forum, &thr.Created, &thr.Votes)
 			if err != nil {
 				//tx.Rollback()
-				log.Println(err)
+				//1
 			}
 			//thr.Created, err = time.Parse("2006-01-02T15:04:05.000+03:00", thr.Created.String())
 			//if err != nil {
@@ -171,7 +182,7 @@ func (f *Forum) GetThreads(ctx *routing.Context) (*Threads, *Error) {
 			threads = append(threads, &thr)
 		}
 		//tx.Commit()
-		//log.Println(string(ctx.Request.RequestURI()))
+		////1
 		return &threads, nil
 
 	} else {

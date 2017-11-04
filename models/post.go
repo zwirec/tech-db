@@ -9,6 +9,7 @@ import (
 	"github.com/go-ozzo/ozzo-validation"
 	"github.com/qiangxue/fasthttp-routing"
 	"github.com/zwirec/tech-db/db"
+	"sync"
 )
 
 //easyjson:json
@@ -52,7 +53,7 @@ func (p *Post) Update() (*Post, *Error) {
 		Scan(&p.ID, &p.Message, &p.Thread, &p.Parent, &p.Author,
 		&p.Created, &p.Forum, &p.IsEdited);
 		err != nil {
-		log.Println(err)
+		//1
 		tx.Rollback()
 		return nil, &Error{Type: ErrorNotFound}
 	}
@@ -75,7 +76,7 @@ func (p *Post) Details(ctx *routing.Context) (*PostFull, *Error) {
 		&postFull.Post.Created, &postFull.Post.IsEdited);
 		err != nil {
 		//tx.Rollback()
-		log.Println(err)
+		//1
 		return nil, &Error{Type: ErrorNotFound}
 	}
 
@@ -88,7 +89,7 @@ func (p *Post) Details(ctx *routing.Context) (*PostFull, *Error) {
 			Scan(&postFull.Author.About, &postFull.Author.Email, &postFull.Author.Fullname, &postFull.Author.Nickname);
 			err != nil {
 			//tx.Rollback()
-			log.Println(err)
+			//1
 			return nil, &Error{Type: ErrorNotFound}
 		}
 	}
@@ -105,7 +106,7 @@ func (p *Post) Details(ctx *routing.Context) (*PostFull, *Error) {
 			&postFull.Thread.Created, &postFull.Thread.Votes);
 			err != nil {
 			//tx.Rollback()
-			log.Println(err)
+			//1
 			return nil, &Error{Type: ErrorNotFound}
 		}
 	}
@@ -120,7 +121,7 @@ func (p *Post) Details(ctx *routing.Context) (*PostFull, *Error) {
 			&postFull.Forum.Threads, &postFull.Forum.User);
 			err != nil {
 			//tx.Rollback()
-			log.Println(err)
+			//1
 			return nil, &Error{Type: ErrorNotFound}
 		}
 	}
@@ -138,10 +139,21 @@ func (p *Post) Validate() error {
 	)
 }
 
+
+var PostsPool = sync.Pool{New: func() interface{} {
+	return Posts{}
+}}
+
+var userPool = sync.Pool{New: func() interface{} {
+	return &User{}
+}}
+
 func (ps *Posts) Create(ctx *routing.Context) (Posts, *Error) {
 	posts := make(Posts, 0, len(*ps))
 
 	user := User{}
+	//defer userPool.Put(user)
+
 	var userNickname string
 	var userId int
 
@@ -157,19 +169,19 @@ func (ps *Posts) Create(ctx *routing.Context) (Posts, *Error) {
 	//		Scan(&userId, &userNickname, &user.Fullname, &user.Email, &user.About);
 	//		err != nil {
 	//		tx.Rollback()
-	//		log.Println(err)
+	//		//1
 	//		return nil, &Error{Type: ErrorNotFound}
 	//	}
 	//}
 
 	if err != nil {
-		log.Println(err)
+		//1
 	}
 
 	_, err = database.DB.Prepare("users_forum", `INSERT INTO users_forum (forum_slug, nickname, fullname, email, about)
 												VALUES($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`)
 	if err != nil {
-		log.Println(err)
+		//1
 	}
 
 	if err := tx.QueryRow(`SELECT t.id, t.forum_slug::text
@@ -178,7 +190,7 @@ func (ps *Posts) Create(ctx *routing.Context) (Posts, *Error) {
 						ELSE t.slug = $2
 						END`, ctx.Get("thread_id"), ctx.Get("thread_slug")).Scan(&threadId, &forumSlug);
 		err != nil {
-		log.Println(err)
+		//1
 		tx.Rollback()
 		return nil, &Error{Type: ErrorNotFound}
 	}
@@ -207,10 +219,10 @@ func (ps *Posts) Create(ctx *routing.Context) (Posts, *Error) {
 										VALUES ($1, $2, $3, $4, $5, $6, $7, $8);`)
 
 	batchPosts := database.DB.BeginBatch()
-	batch_usr_forum := database.DB.BeginBatch()
+	batchUsrForum := database.DB.BeginBatch()
 
 	if err != nil {
-		log.Println(err)
+		//1
 		tx.Rollback()
 		//tx2.Rollback()
 	}
@@ -226,7 +238,7 @@ func (ps *Posts) Create(ctx *routing.Context) (Posts, *Error) {
 	}
 
 	if err := res.Scan(&ids); err != nil {
-		log.Println(err)
+		//1
 	}
 
 	//log.Printf("%+v", ids)
@@ -236,26 +248,26 @@ func (ps *Posts) Create(ctx *routing.Context) (Posts, *Error) {
 			Scan(&userId, &userNickname, &user.Fullname, &user.Email, &user.About);
 			err != nil {
 			tx.Rollback()
-			log.Println(err)
+			//1
 			return nil, &Error{Type: ErrorNotFound}
 		}
 		_, err := database.DB.Exec("users_forum", forumSlug, userNickname, user.Fullname, user.Email, user.About)
 
 		if err != nil {
-			log.Println(err)
+			//1
 			tx.Rollback()
 		}
 
 
-		batch_usr_forum.Queue("users_forum", []interface{}{forumSlug, userNickname, user.Fullname, user.Email, user.About},
-							nil, nil)
-		//log.Println(c.RowsAffected())
+		//batchUsrForum.Queue("users_forum", []interface{}{forumSlug, userNickname, user.Fullname, user.Email, user.About},
+		//					nil, nil)
+		////1
 
 		if p.Parent != 0 {
 			if err := tx.QueryRow("stmt2", ctx.Get("thread_id"), ctx.Get("thread_slug"), p.Parent).Scan(&threadId);
 				err != nil {
 				tx.Rollback()
-				log.Println(err)
+				//1
 				return nil, &Error{Type: ErrorAlreadyExists}
 			}
 		}
@@ -280,24 +292,24 @@ func (ps *Posts) Create(ctx *routing.Context) (Posts, *Error) {
 		tx.Rollback()
 		log.Fatal(err)
 	}
-	if err := batch_usr_forum.Send(context.Background(), nil); err != nil {
+	if err := batchUsrForum.Send(context.Background(), nil); err != nil {
 		tx.Rollback()
 		log.Fatal()
 	}
 
 	_, err = batchPosts.ExecResults()
-	_, err = batch_usr_forum.ExecResults()
+	_, err = batchUsrForum.ExecResults()
 
 	if err != nil {
-		log.Println(err)
+		//1
 	}
 
 	if err := batchPosts.Close(); err != nil {
-		log.Println(err)
+		//1
 	}
 
-	if err := batch_usr_forum.Close(); err != nil {
-		log.Println(err)
+	if err := batchUsrForum.Close(); err != nil {
+		//1
 	}
 
 	//database.DB.Deallocate("stmt1")
@@ -308,6 +320,11 @@ func (ps *Posts) Create(ctx *routing.Context) (Posts, *Error) {
 	forum.UpdateCountPosts(len(*ps))
 	//database.DB.Reset()
 	tx.Commit()
+
+	//if database.DB.Stat().CurrentConnections > 10 {
+	//	database.DB.Reset()
+	//}
+
 	return posts, nil
 }
 

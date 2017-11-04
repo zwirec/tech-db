@@ -1,8 +1,6 @@
 package models
 
 import (
-	"log"
-
 	"github.com/go-ozzo/ozzo-validation"
 	"github.com/qiangxue/fasthttp-routing"
 	"github.com/zwirec/tech-db/db"
@@ -37,7 +35,7 @@ func (v *Vote) Vote(ctx *routing.Context) (*Thread, *Error) {
   												DO UPDATE SET voice = EXCLUDED.voice
 												RETURNING thread_id`,
 		v.Nickname, ctx.Get("thread_id"), ctx.Get("thread_slug"), v.Voice).Scan(new(int)); err != nil {
-		log.Println(err)
+		//1
 		tx.Rollback()
 		return nil, &Error{Type: ErrorNotFound}
 	}
@@ -50,7 +48,7 @@ func (v *Vote) Vote(ctx *routing.Context) (*Thread, *Error) {
 						END`, ctx.Get("thread_id"), ctx.Get("thread_slug")).
 		Scan(&thr.ID, &thr.Slug, &thr.Title, &thr.Message, &thr.Forum, &thr.Author, &thr.Created, &thr.Votes);
 		err != nil {
-		log.Println(err)
+		//1
 		tx.Rollback()
 		return nil, &Error{Type: ErrorAlreadyExists}
 	}

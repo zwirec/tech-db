@@ -1,9 +1,10 @@
 package models
 
 import (
-	"log"
 	"regexp"
 	"time"
+
+	"sync"
 
 	"github.com/go-ozzo/ozzo-validation"
 	"github.com/jackc/pgx"
@@ -28,13 +29,17 @@ type Thread struct {
 	Created time.Time
 }
 
+var rowsPool = sync.Pool{New: func() interface{} {
+	return &pgx.Rows{}
+}}
+
 func (t *Thread) Posts(ctx *routing.Context) (Posts, *Error) {
 	tx := database.DB
 	var threadId int
 	if err := tx.QueryRow(`SELECT id FROM thread t WHERE CASE WHEN $1::int IS NOT NULL THEN t.id = $1 ELSE t.slug = $2 END`,
 		ctx.Get("thread_id"),
 		ctx.Get("thread_slug")).Scan(&threadId); err != nil {
-		log.Println(err)
+		//1
 		//tx.Rollback()
 		return nil, &Error{Type: ErrorNotFound}
 	}
@@ -45,24 +50,27 @@ func (t *Thread) Posts(ctx *routing.Context) (Posts, *Error) {
 	//						  ELSE t.slug = $2
 	//						  END`, ctx.Get("thread_id"), ctx.Get("thread_slug")).
 	//	Scan(new(int)); err != nil {
-	//	//log.Println(err)
+	//	////1
 	//	tx.Rollback()
 	//	return nil, &database.DBError{Type: database.ERROR_DONT_EXISTS, Model: "thread"}
 	//}
 
-	var rows *pgx.Rows
+	var rows = rowsPool.Get().(*pgx.Rows)
+
+	defer rowsPool.Put(rows)
+
 	var err error
+	//posts := PostsPool.Get().(Posts)
 	posts := Posts{}
+	//defer PostsPool.Put(posts)
 	limit := ctx.Get("limit").(string)
 	sort := ctx.Get("sort").(string)
-	//log.Println(limit)
 
 	if ctx.Get("sort_type") == "flat" || ctx.Get("sort_type") == "" {
 		if rows, err = tx.Query(
 			`SELECT p.id, p.message, p.thread_id as thread, p.forum_slug::text as forum, p.owner_nickname::text as author,
 					p.created, p.isedited, p.parent FROM post p
-					JOIN thread t ON p.thread_id = t.id
-					WHERE t.id = $1 AND
+					WHERE p.thread_id = $1 AND
 					CASE WHEN $2 > -1 THEN
 						CASE WHEN $3 = 'DESC'
 							THEN p.id < $2::int
@@ -71,21 +79,19 @@ func (t *Thread) Posts(ctx *routing.Context) (Posts, *Error) {
 					ELSE TRUE
 					END
 					ORDER BY p.id `+
-				sort +
-				`,p.thread_id LIMIT `+
+				sort+
+				`,p.thread_id `+ sort+ ` LIMIT `+
 				limit+ `;`,
 			threadId,
 			ctx.Get("since"),
 			ctx.Get("sort"));
 			err != nil {
-			log.Println(err)
+			//1
 			//tx.Rollback()
 			return nil, &Error{Type: ErrorNotFound}
 		}
 
 	} else if ctx.Get("sort_type") == "tree" {
-		//log.Println("tree")
-
 		if rows, err = tx.Query(
 			`SELECT
                       p.id,
@@ -97,10 +103,9 @@ func (t *Thread) Posts(ctx *routing.Context) (Posts, *Error) {
                       p.isedited,
                       p.parent
                     FROM post p
-                      JOIN thread t ON p.thread_id = t.id
                     WHERE p.thread_id = $1
                       AND
-                      CASE WHEN $2 > -1
+                      CASE WHEN $2::int > -1
                         THEN
                           CASE WHEN $3 = 'DESC'
                             THEN
@@ -118,12 +123,12 @@ func (t *Thread) Posts(ctx *routing.Context) (Posts, *Error) {
 						ELSE
                         TRUE
                       END
-                    ORDER BY path ` + sort + `, p.thread_id LIMIT `+ limit + `;`,
+                    ORDER BY path `+ sort+ `, p.thread_id `+ sort+ ` LIMIT `+ limit+ `;`,
 			threadId,
 			ctx.Get("since"),
 			ctx.Get("sort"));
 			err != nil {
-			log.Println(err)
+			//1
 			//tx.Rollback()
 			return nil, &Error{Type: ErrorNotFound}
 		}
@@ -144,7 +149,7 @@ func (t *Thread) Posts(ctx *routing.Context) (Posts, *Error) {
                            p1.path,
                            p1.thread_id
                          FROM post p1
-                         WHERE p1.parent = 0 AND p1.thread_id = $1 AND
+                         WHERE p1.parent = 0 AND p1.thread_id = $1::int AND
                                CASE WHEN $2 > -1
                                  THEN
                                    CASE WHEN $3 = 'DESC'
@@ -152,24 +157,24 @@ func (t *Thread) Posts(ctx *routing.Context) (Posts, *Error) {
                                        p1.path < (
                                          SELECT p2.path
                                          FROM post p2
-                                         WHERE p2.id = $2)
+                                         WHERE p2.id = $2::int)
 
                                    ELSE p1.path > (
                                      SELECT p2.path
                                      FROM post p2
-                                     WHERE p2.id = $2)
+                                     WHERE p2.id = $2::int)
                                    END
                                ELSE p1.id > 0
                                END
-                         ORDER BY p1.path ` + sort + `
-                         ,p1.created LIMIT ` + limit + `) p1 ON p.path && p1.path
-
-                ORDER BY p.path `+ sort+ `, p.created;`,
+                         ORDER BY p1.path `+ sort+ `
+                         ,p1.thread_id `+ sort+ ` LIMIT `+ limit+ `) p1 ON p.path && p1.path
+				WHERE p.thread_id = $1::int
+                ORDER BY p.path `+ sort+ `, p.thread_id `+ sort+ `;`,
 			threadId,
 			ctx.Get("since"),
 			ctx.Get("sort"));
 			err != nil {
-			log.Println(err)
+			//1
 			//tx.Rollback()
 			return nil, &Error{Type: ErrorNotFound}
 		}
@@ -197,7 +202,7 @@ func (t *Thread) Details(ctx *routing.Context) (*Thread, *Error) {
 		ctx.Get("thread_id"), ctx.Get("thread_slug")).
 		Scan(&thr.ID, &thr.Slug, &thr.Title, &thr.Message, &thr.Forum, &thr.Author, &thr.Created, &thr.Votes);
 		err != nil {
-		log.Println(err)
+		//1
 		//tx.Rollback()
 		return nil, &Error{Type: ErrorNotFound}
 	}
@@ -229,7 +234,7 @@ func (thr *Thread) Create() (*Thread, *Error) {
 		Scan(&user_id);
 		err != nil {
 		tx.Rollback()
-		log.Println(err)
+		//1
 		return nil, &Error{Type: ErrorNotFound}
 	}
 
@@ -243,7 +248,7 @@ func (thr *Thread) Create() (*Thread, *Error) {
 		Scan(&forumId, &forumSlug);
 		err != nil {
 		tx.Rollback()
-		log.Println(err)
+		//1
 		return nil, &Error{Type: ErrorNotFound}
 	}
 
@@ -257,10 +262,10 @@ func (thr *Thread) Create() (*Thread, *Error) {
 		&thr.Forum, &thr.Author);
 		err == nil {
 		tx.Rollback()
-		log.Println(err)
+		//1
 		return thr, &Error{Type: ErrorAlreadyExists}
 	} else {
-		//log.Println(err)
+		////1
 	}
 
 	res := tx.QueryRow(`INSERT INTO thread (slug, title, message, created, owner_id, owner_nickname, forum_id, forum_slug)
@@ -269,7 +274,7 @@ func (thr *Thread) Create() (*Thread, *Error) {
 		thr.Slug, thr.Title, thr.Message, thr.Created, user_id, thr.Author, forumId, thr.Forum)
 
 	if err := res.Scan(&thr.ID, &thr.Slug, &thr.Title, &thr.Message, &thr.Created, &thr.Votes); err != nil {
-		log.Println(err)
+		//1
 		tx.Rollback()
 		return thr, &Error{Type: ErrorAlreadyExists}
 	}

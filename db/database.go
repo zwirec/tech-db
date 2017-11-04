@@ -56,7 +56,7 @@ func InitDB() (err error) {
 		log.Fatal(err)
 	}
 	//DBH, err = fastsql.Open("postgres", fmt.Sprintf("user=docker host=localhost password=docker dbname=forum_db port=%s sslmode=disable", port), 50)
-	//log.Println(err)
+	////(1)
 	initFile, err := ioutil.ReadFile(fmt.Sprintf("%s/src/github.com/zwirec/tech-db/init.sql", os.Getenv("GOPATH")))
 	if err != nil {
 		log.Fatal(err)
@@ -67,7 +67,7 @@ func InitDB() (err error) {
 
 	if err != nil {
 		tx.Rollback()
-		log.Println(err)
+		//(1)
 	}
 	tx.Commit()
 	DB.Reset()

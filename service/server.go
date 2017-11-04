@@ -1,13 +1,15 @@
 package service
 
 import (
-	"io/ioutil"
 	"log"
+
+	"runtime"
 
 	_ "github.com/mkevac/debugcharts"
 	"github.com/qiangxue/fasthttp-routing"
 	"github.com/valyala/fasthttp"
 	"github.com/zwirec/tech-db/db"
+	"io/ioutil"
 )
 
 type Service struct {
@@ -21,7 +23,7 @@ func NewService() *Service {
 
 func (svc *Service) Run() error {
 
-	//runtime.GOMAXPROCS(2)
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	svc.setEndpointHandlers()
 

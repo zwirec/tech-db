@@ -5,8 +5,15 @@ MAINTAINER Daniil Kotelnikov
 RUN apt-get -y update && apt-get install -y wget git
 
 
+#RUN echo "deb http://apt.postgresql.org/pub/repos/apt/ zesty-pgdg main" >> /etc/apt/sources.list.d/pgdg.list
+#
+#RUN wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
+#  apt-key add -
+
+#RUN apt-get -y update
+
 ENV PGVER 9.6
-RUN apt-get install -y postgresql-$PGVER
+RUN apt-get -f install -y postgresql-$PGVER
 
 USER postgres
 
@@ -28,6 +35,8 @@ EXPOSE 5432
 
 USER root
 
+#RUN apt-get install pgbadger
+
 #
 # Сборка проекта
 #
@@ -47,10 +56,34 @@ ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 
 
 RUN echo "synchronous_commit='off'" >> /etc/postgresql/$PGVER/main/postgresql.conf
+RUN echo "fsync = 'off'" >> /etc/postgresql/$PGVER/main/postgresql.conf
+
 RUN echo "max_wal_size = 1GB" >> /etc/postgresql/$PGVER/main/postgresql.conf
-RUN echo "shared_buffers = 512MB" >> /etc/postgresql/$PGVER/main/postgresql.conf
-RUN echo "effective_cache_size = 512MB" >> /etc/postgresql/$PGVER/main/postgresql.conf
-RUN echo "work_mem = 256MB" >> /etc/postgresql/$PGVER/main/postgresql.conf
+RUN echo "shared_buffers = 128MB" >> /etc/postgresql/$PGVER/main/postgresql.conf
+RUN echo "effective_cache_size = 256MB" >> /etc/postgresql/$PGVER/main/postgresql.conf
+RUN echo "work_mem = 64MB" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#RUN echo "wal_sync_method = 'open_datasync'" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#RUN echo "bgwriter_flush_after = 0" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#RUN echo "checkpoint_flush_after = 0" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#RUN echo "effective_io_concurrency = 0" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#RUN echo "vacuum_cost_delay = 100" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#RUN echo "vacuum_cost_page_hit = 6" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#RUN echo "vacuum_cost_page_limit = 100" >> /etc/postgresql/$PGVER/main/postgresql.conf
+
+
+
+#RUN echo "log_destination = 'stderr'" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#RUN echo "log_line_prefix = '%t [%p]: [%l-1] user=%u,db=%d '" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#RUN echo "log_statement = 'none' " >> /etc/postgresql/$PGVER/main/postgresql.conf
+#RUN echo "log_duration = off " >> /etc/postgresql/$PGVER/main/postgresql.conf
+#RUN echo "log_min_duration_statement = 0 " >> /etc/postgresql/$PGVER/main/postgresql.conf
+#              RUN echo "log_checkpoints = on" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#              RUN echo "log_connections = on" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#              RUN echo "log_disconnections = on" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#              RUN echo "log_lock_waits = on" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#              RUN echo "log_temp_files = 0" >> /etc/postgresql/$PGVER/main/postgresql.conf
+#              RUN echo "lc_messages = 'C'"  >> /etc/postgresql/$PGVER/main/postgresql.conf
+
 #RUN echo "log_duration = on" >> /etc/postgresql/$PGVER/main/postgresql.conf
 #RUN echo "log_min_duration_statement = 20" >> /etc/postgresql/$PGVER/main/postgresql.conf
 #RUN echo "max_prepared_transactions = 8" >> /etc/postgresql/$PGVER/main/postgresql.conf
