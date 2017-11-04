@@ -50,11 +50,11 @@ CREATE TABLE IF NOT EXISTS users_forum
 (
   id         BIGSERIAL NOT NULL CONSTRAINT users_forum_pkey
   PRIMARY KEY,
-  forum_slug CITEXT NOT NULL,
-  nickname   CITEXT NOT NULL,
-  fullname   TEXT   NOT NULL,
-  email      CITEXT NOT NULL,
-  about      CITEXT NOT NULL
+  forum_slug CITEXT    NOT NULL,
+  nickname   CITEXT    NOT NULL,
+  fullname   TEXT      NOT NULL,
+  email      CITEXT    NOT NULL,
+  about      CITEXT    NOT NULL
 );
 
 CREATE UNIQUE INDEX ON users_forum (forum_slug, nickname);
@@ -90,6 +90,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS thread_slug_uindex
 CREATE INDEX IF NOT EXISTS thread_forum_id_idx
   ON thread (forum_id);
 
+CREATE INDEX IF NOT EXISTS thread_created_idx
+  ON thread (created);
 -- CREATE INDEX IF NOT EXISTS thread_owner_id_idx
 --   ON thread (owner_id);
 
@@ -137,24 +139,45 @@ CREATE TABLE IF NOT EXISTS post
 
 CREATE INDEX ON post (parent, thread_id);
 
+CREATE INDEX IF NOT EXISTS post_id_forum_slug_idx
+  ON post (id, forum_slug);
+
+CREATE INDEX IF NOT EXISTS post_id_thread_id_idx
+  ON post (id, thread_id);
+
+CREATE INDEX IF NOT EXISTS post_owner_id_idx
+  ON post (owner_id);
+
+CREATE INDEX IF NOT EXISTS post_parent_id_idx
+  ON post (parent);
+
+CREATE INDEX IF NOT EXISTS post_parent_path_idx
+  ON post (path);
+
+CREATE INDEX IF NOT EXISTS post_parent_thread_id_id_idx
+  ON post (parent, thread_id, id);
+
+CREATE INDEX IF NOT EXISTS post_parent_thread_id_idx
+  ON post (parent, thread_id);
+
+CREATE INDEX IF NOT EXISTS post_path_created_idx
+  ON post (path, created);
+
 CREATE INDEX IF NOT EXISTS post_forum_slug
   ON post (forum_slug);
 
 CREATE INDEX IF NOT EXISTS post_thread_id_idx
   ON post (thread_id);
 
-CREATE INDEX IF NOT EXISTS post_parent_id_idx
-  ON post (parent);
+CREATE INDEX IF NOT EXISTS post_thread_id_path_idx
+  ON post (thread_id, path);
 
 
-CREATE INDEX IF NOT EXISTS post_owner_id_idx
-  ON post (owner_id);
+-- CREATE INDEX IF NOT EXISTS post_parent_path_idx
+--   ON post USING GIN (path);
 
-CREATE INDEX IF NOT EXISTS post_parent_path_idx
-  ON post USING GIN (path);
-
-CREATE INDEX IF NOT EXISTS post_parent_id_idx
-  ON post (parent, path);
+-- CREATE INDEX IF NOT EXISTS post_parent_id_idx
+--   ON post (parent, path);
 
 CREATE OR REPLACE FUNCTION update_section_parent_path()
   RETURNS TRIGGER
@@ -206,7 +229,8 @@ BEGIN
         u.email,
         u.about
       FROM "user" u
-        WHERE u.id = new.owner_id FOR NO KEY UPDATE)
+      WHERE u.id = new.owner_id
+      FOR NO KEY UPDATE)
   ON CONFLICT DO NOTHING;
   RETURN NEW;
 END;
@@ -226,7 +250,8 @@ BEGIN
         u.email,
         u.about
       FROM "user" u
-        WHERE u.id = new.owner_id FOR NO KEY UPDATE)
+      WHERE u.id = new.owner_id
+      FOR NO KEY UPDATE)
   ON CONFLICT DO NOTHING;
   RETURN NEW;
 END;
@@ -301,7 +326,7 @@ CREATE TRIGGER update_count_votes_trig
 EXECUTE PROCEDURE update_count_votes();
 
 
-CREATE INDEX ON post (parent, thread_id, id);
-CREATE INDEX ON post (thread_id, path);
-CREATE INDEX on post (id ASC , thread_id ASC);
-CREATE INDEX ON post (id ASC, forum_slug ASC);
+-- CREATE INDEX ON post (parent, thread_id, id);
+-- CREATE INDEX ON post (thread_id, path);
+-- CREATE INDEX ON post (id ASC, thread_id ASC);
+-- CREATE INDEX ON post (id ASC, forum_slug ASC);
