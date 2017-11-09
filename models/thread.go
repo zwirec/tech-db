@@ -144,13 +144,11 @@ func (t *Thread) Posts(ctx *routing.Context) (Posts, *Error) {
                   p.isedited,
                   p.parent
                 FROM post p
-                  JOIN (
-                         SELECT
-                           p1.path,
-                           p1.thread_id
+				WHERE p.thread_id = $1::int AND p.path[1] in (SELECT
+                           p1.path[1]
                          FROM post p1
                          WHERE p1.parent = 0 AND p1.thread_id = $1::int AND
-                               CASE WHEN $2 > -1
+                               CASE WHEN $2::int > -1
                                  THEN
                                    CASE WHEN $3 = 'DESC'
                                      THEN
@@ -158,18 +156,16 @@ func (t *Thread) Posts(ctx *routing.Context) (Posts, *Error) {
                                          SELECT p2.path
                                          FROM post p2
                                          WHERE p2.id = $2::int)
-
                                    ELSE p1.path > (
                                      SELECT p2.path
                                      FROM post p2
                                      WHERE p2.id = $2::int)
                                    END
-                               ELSE p1.id > 0
+                               ELSE TRUE
                                END
                          ORDER BY p1.path `+ sort+ `
-                         ,p1.thread_id `+ sort+ ` LIMIT `+ limit+ `) p1 ON p.path && p1.path
-				WHERE p.thread_id = $1::int
-                ORDER BY p.path `+ sort+ `, p.thread_id `+ sort+ `;`,
+                         ,p1.thread_id `+ sort+ ` LIMIT `+ limit+ `)
+                ORDER BY p.path `+ sort+ `,p.thread_id `+ sort+ `;`,
 			threadId,
 			ctx.Get("since"),
 			ctx.Get("sort"));
