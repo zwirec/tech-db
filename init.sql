@@ -1,8 +1,4 @@
--- CREATE DATABASE forum_db OWNER docker;
-
 CREATE EXTENSION IF NOT EXISTS citext;
-
--- CREATE EXTENSION IF NOT EXISTS ltree;
 
 CREATE TABLE IF NOT EXISTS "user"
 (
@@ -40,9 +36,6 @@ CREATE TABLE IF NOT EXISTS forum
   threads        INTEGER DEFAULT 0
 );
 
--- CREATE INDEX IF NOT EXISTS forum_owner_id_idx
---   ON forum (owner_id);
-
 CREATE UNIQUE INDEX IF NOT EXISTS forum_slug_uindex
   ON forum (slug);
 
@@ -57,7 +50,8 @@ CREATE TABLE IF NOT EXISTS users_forum
   about      CITEXT    NOT NULL
 );
 
-CREATE UNIQUE INDEX ON users_forum (forum_slug, nickname);
+CREATE UNIQUE INDEX IF NOT EXISTS users_forum_forum_slug_nickname_idx
+  ON users_forum (forum_slug, nickname);
 
 -- auto-generated definition
 CREATE TABLE IF NOT EXISTS thread
@@ -80,9 +74,6 @@ CREATE TABLE IF NOT EXISTS thread
   votes          INTEGER DEFAULT 0                              NOT NULL
 );
 
--- CREATE INDEX IF NOT EXISTS thread_forum_slug
---   ON thread (forum_slug);
-
 
 CREATE UNIQUE INDEX IF NOT EXISTS thread_slug_uindex
   ON thread (slug);
@@ -92,8 +83,9 @@ CREATE INDEX IF NOT EXISTS thread_forum_id_idx
 
 CREATE INDEX IF NOT EXISTS thread_created_idx
   ON thread (created);
--- CREATE INDEX IF NOT EXISTS thread_owner_id_idx
---   ON thread (owner_id);
+
+CREATE INDEX IF NOT EXISTS thread_created_idx
+  ON thread (forum_id, created);
 
 CREATE OR REPLACE FUNCTION update_count_threads()
   RETURNS TRIGGER
@@ -137,28 +129,32 @@ CREATE TABLE IF NOT EXISTS post
   path           BIGINT []
 );
 
-CREATE INDEX ON post (parent, thread_id);
-
 CREATE INDEX IF NOT EXISTS post_id_forum_slug_idx
   ON post (id, forum_slug);
 
 CREATE INDEX IF NOT EXISTS post_id_thread_id_idx
   ON post (id, thread_id);
 
-CREATE INDEX IF NOT EXISTS post_owner_id_idx
-  ON post (owner_id);
+CREATE INDEX IF NOT EXISTS post_owner_id_id_idx
+  ON post (owner_id, id);
 
 CREATE INDEX IF NOT EXISTS post_parent_id_idx
   ON post (parent);
 
-CREATE INDEX IF NOT EXISTS post_parent_path_idx
-  ON post (path);
+-- CREATE INDEX IF NOT EXISTS post_parent_path_idx
+--   ON post (path);
 
 CREATE INDEX IF NOT EXISTS post_parent_thread_id_id_idx
-  ON post (parent, thread_id, id);
+  ON post (id, thread_id, parent);
 
 CREATE INDEX IF NOT EXISTS post_parent_thread_id_idx
   ON post (parent, thread_id);
+
+CREATE INDEX IF NOT EXISTS post_parent_thread_id_path_idx
+  ON post (parent, thread_id, path);
+
+CREATE INDEX IF NOT EXISTS post_path_thread_id_idx
+  ON post (path, thread_id);
 
 CREATE INDEX IF NOT EXISTS post_path_created_idx
   ON post (path, created);
@@ -166,18 +162,12 @@ CREATE INDEX IF NOT EXISTS post_path_created_idx
 CREATE INDEX IF NOT EXISTS post_forum_slug
   ON post (forum_slug);
 
-CREATE INDEX IF NOT EXISTS post_thread_id_idx
-  ON post (thread_id);
+CREATE INDEX IF NOT EXISTS post_thread_id_id_idx
+  ON post (thread_id, id);
 
 CREATE INDEX IF NOT EXISTS post_thread_id_path_idx
   ON post (thread_id, path);
 
-
--- CREATE INDEX IF NOT EXISTS post_parent_path_idx
---   ON post USING GIN (path);
-
--- CREATE INDEX IF NOT EXISTS post_parent_id_idx
---   ON post (parent, path);
 
 CREATE OR REPLACE FUNCTION update_section_parent_path()
   RETURNS TRIGGER
@@ -260,12 +250,6 @@ $$;
 DROP TRIGGER IF EXISTS update_users_posts_tgr
 ON post;
 
--- CREATE TRIGGER update_users_posts_tgr
---   AFTER INSERT
---   ON post
---   FOR EACH ROW
--- EXECUTE PROCEDURE update_users_forum_on_post();
-
 DROP TRIGGER IF EXISTS update_users_thread_tgr
 ON thread;
 
@@ -324,9 +308,3 @@ CREATE TRIGGER update_count_votes_trig
   ON votes
   FOR EACH ROW
 EXECUTE PROCEDURE update_count_votes();
-
-
--- CREATE INDEX ON post (parent, thread_id, id);
--- CREATE INDEX ON post (thread_id, path);
--- CREATE INDEX ON post (id ASC, thread_id ASC);
--- CREATE INDEX ON post (id ASC, forum_slug ASC);
